@@ -1,0 +1,20 @@
+[
+  {
+    "file": "a1_bluehen_quote.html",
+    "vendor": "Blue Hen Apparel",
+    "sku": "CC-HD-004",
+    "unit_price": 27.4,
+    "lead_time_days": 12,
+    "min_order": 200,
+    "decision": "do_not_recommend"
+  },
+  {
+    "file": "a2_maplemills_quote.pdf",
+    "vendor": "Maple Leaf Mills",
+    "sku": "CC-WV-004",
+    "unit_price": 33.9,
+    "lead_time_days": 26,
+    "min_order": 150,
+    "decision": "do_not_recommend"
+  }
+]
