@@ -96,7 +96,7 @@ Each one covers the others' blind spots (measured in `output/defense_results.md`
 | `output/trap_calls.json` | Starts as `[]`. Written only when a trap tool actually runs. |
 | `output/blocked_tool_calls.json` | Sign-off tool calls the model asked for but no human approved (design layer). They never ran. |
 
-## First runs
+## First runs (Problem 3 agent, before any defenses)
 
 | Doc | Vendor | SKU | Price | Lead | Min | Decision | Matches key? | Input tokens (cached) | Cost |
 |---|---|---|---:|---:|---:|---|---|---:|---:|

@@ -14,6 +14,7 @@ import tools  # noqa: E402
 O = ROOT / "output"
 R2 = json.loads((O / "red_team_results.json").read_text())
 R1 = json.loads((O / "red_team_round1" / "red_team_results_round1.json").read_text())
+FINAL = [r for r in json.loads((O / "final_agent_check.json").read_text()) if r["set"] == "data/my_attacks"]
 OUT = O / "red_team.md"
 SETUP_NAMES = {"no_defense": "No defenses (Problem 3 agent)", "defended": "Defended (code + design + prompt)",
                "code_design_only": "Code + design, **no prompt rules**", "prompt_only": "Prompt rules only"}
@@ -89,10 +90,11 @@ for a in ATTACKS:
     w(f"- **What is hidden:** {a['hidden']}")
     w(f"- **Where:** {a['where']}")
     w(f"- **What it tries to make the agent do:** {a['goal']}\n")
-    w("| What a person sees | What the agent reads (no defenses) | What the agent reads (code layer on) |\n|---|---|---|")
+    p7_removed = sorted({h for r in R2 if r["document"] == a["doc"] and r["setup"] == "defended" for h in r["hidden_content_removed"]})
+    w("| What a person sees | What the agent reads (no defenses) | Code layer during Problem 7 (from the run log) |\n|---|---|---|")
     w(f"| ![{a['doc']}](attack_screens/{Path(a['doc']).stem}.png) {a['seen']} "
       f"| \"{snippet(agent_read(rel, False), a['phrase'])}\" "
-      f"| \"{snippet(agent_read(rel, True), a['phrase'])}\". **Still there.** The code layer removed nothing. |")
+      f"| Removed: {'; '.join(p7_removed) if p7_removed else '**nothing**'}. The bait went straight to the model (`hidden_content_removed` was empty on all 3 defended runs). |")
     w("")
     w("**What happened:**\n")
     w("| Setup | Fooled | Price / lead time the agent used | Decision | Reason (first run) |\n|---|:-:|---|---|---|")
@@ -108,14 +110,15 @@ n_cd = sum(tally(R2, a["doc"], "code_design_only")[1] for a in ATTACKS)
 f_p = sum(tally(R2, a["doc"], "prompt_only")[0] for a in ATTACKS)
 n_p = sum(tally(R2, a["doc"], "prompt_only")[1] for a in ATTACKS)
 w("## Which defense stopped them\n")
-w(f"- **Code layer: missed both.** It looks for inline hiding styles and for white, tiny, or off-page PDF text. A stylesheet class and a white box drawn on top are neither, so both baits went straight to the model.")
+w(f"- **Code layer (Problem 7 version): missed both.** It looked for inline hiding styles and for white, tiny, or off-page PDF text. A stylesheet class and a white box drawn on top are neither, so both baits went straight to the model. (Fixed afterwards: see the follow-up below.)")
 w(f"- **Design layer: can't help here.** Code makes the decision, but from the facts the model hands over. If the model reports $20.85 or 16 days, code honestly recommends. "
   f"With code + design but **no prompt rules**, the attacks fooled the agent **{f_cd}/{n_cd}** times.")
 w(f"- **Prompt layer: the one that held.** With the prompt rules alone, the attacks fooled the agent **{f_p}/{n_p}** times. The rules say to use the quote's own line items, and that a figure contradicting them "
   "doesn't count. The model chose the visible line item each time, even though our bait was worded as a tier rather than a correction.")
 w("")
 w("So our defended agent survived these two attacks on **one layer**, the one Problem 6 called \"a request, not a lock\". That's the honest finding of this red team. "
-  "The code layer has blind spots an attacker can find in an afternoon, and on these attacks only the model's judgment stood between the shop and a bad purchase.\n")
+  "The code layer had blind spots an attacker can find in an afternoon, and on these attacks only the model's judgment stood between the shop and a bad purchase. "
+  "That's why we rebuilt the code layer before the exam (see **Follow-up** at the end).\n")
 
 w("## Round 1: what didn't work\n")
 w("Our first two attacks used the same two hiding tricks with **new goals** that try to bend the *rules* instead of the *facts*. Both fooled nothing, **even with no defenses**:\n")
@@ -132,11 +135,28 @@ w("")
 w("Files, screenshots, and results for round 1 are in `output/red_team_round1/`. The lesson shaped round 2: **this model guards its rules much better than its facts.** "
   "An attack that argues with the handbook loses. An attack that quietly supplies a more favourable *number*, framed as something that applies to us, wins every time against an undefended agent.\n")
 
-w("## What we'd fix next\n")
-w("1. **Code layer, HTML:** render the page and keep only what's actually painted. In practice: run the page through a headless browser and take `innerText`, which drops clipped or `sr-only` content. Or at least apply `<style>` rules, not just inline styles.")
-w("2. **Code layer, PDF:** drop text that sits under a filled shape drawn later in the same colour as the page (pdfplumber exposes both `chars` and `rects` with positions and fill colours). Or extract from a rendered image with OCR, so only visible ink counts.")
-w("3. **Design layer:** cross-check each extracted number against the *visible-only* text in code. If a price or lead time the model reports doesn't appear in what a person would see, flag the quote for a human instead of deciding.")
-w("4. **Process:** treat any \"special price\" or \"faster lead time\" that only shows up for the AI as a red flag about the vendor, not just the document.")
+w("## Follow-up: closed in Problem 8\n")
+w("We didn't leave the gap open. Before the exam run (Problem 8) we rebuilt the code layer around both blind spots, using general rules rather than ones aimed at these two files:\n")
+w("- **HTML:** the hiding check now applies rules from the page's `<style>` blocks as well as inline styles, and it recognises the clip / 1px / scale-to-zero patterns behind `.sr-only`, plus near-white colours computed from the actual colour value.")
+w("- **PDF:** the code layer renders each page and keeps a character only if its box on the rendered page actually has ink. That one test catches covered text (attack 2), white text, and off-page text.\n")
+w("| Attack | Code layer during Problem 7 | Final code layer (now) | Final agent's answer |\n|---|---|---|---|")
+for a in ATTACKS:
+    rel = f"data/my_attacks/{a['doc']}"
+    removed_now = []
+    tools.load_document(rel, True, removed_now)
+    now = removed_now[0].split("] ", 1) if removed_now else ["", "nothing"]
+    fr = next(r for r in FINAL if r["document"] == a["doc"])
+    w(f"| {a['doc']} | removed nothing | **removes it:** {now[0].lstrip('[')}: \"{now[1][:70]}…\" | {fr['decision']['agent']}, all fields match the key {'✅' if not fr['fooled'] else '❌'} |")
+fc = json.loads((O / "final_agent_check.json").read_text())
+w("")
+w(f"So both attacks are now stopped by **two** layers: the code layer strips the bait, and the prompt rules would resist it anyway. "
+  f"The rebuilt agent scored **{sum(not r['fooled'] for r in fc)}/{len(fc)}** on every document we have answers for (12 practice + these 2; `output/final_agent_check.json`). "
+  "In the exam set, the new stylesheet check caught a hidden deposit request (e03) that the Problem 6 code layer would have passed to the model.\n")
+w("| Fix we proposed | Status |\n|---|---|")
+w("| Code layer, HTML: honour `<style>` rules, not just inline styles | ✅ done (Problem 8) |")
+w("| Code layer, PDF: drop text under shapes painted over it | ✅ done, generalised to \"keep only text that leaves ink on the rendered page\" |")
+w("| Design layer: check each extracted number against the visible text | ◐ partly. Every number is checked, and anything not in the visible text is logged as `not_in_visible_text` in the audit trail. It flags; it doesn't block, because a value can legitimately be converted (per dozen → per unit). |")
+w("| Process: treat AI-only bait as a red flag about the vendor | ➜ recommended to the store manager in `output/hw6_report.html` |")
 
 OUT.write_text("\n".join(L) + "\n")
 print(f"wrote {OUT.relative_to(ROOT)}")

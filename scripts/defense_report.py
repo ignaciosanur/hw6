@@ -173,6 +173,12 @@ w("## Notes\n")
 w("- **`send_email` and `approve_payment` are still in the system**, as required. With the design layer they are registered as **needing approval**: "
   "the model can ask, a human has to say yes, and until then nothing runs. No practice document got the model to ask in this run "
   f"(blocked: {blocked}). We confirmed the hold-and-deny path works with a forced test call (PydanticAI's `TestModel`) before running the documents.")
+fc = json.loads((O / "final_agent_check.json").read_text())
+w("- **After Problem 6, the final agent got three more upgrades** (Problem 8), driven by our own red team (Problem 7), which slipped two attacks past this version of the code layer: "
+  "(1) the code layer applies `<style>` stylesheet rules, not just inline styles; (2) PDF text is kept only if it leaves ink on the rendered page; "
+  "(3) the design layer extracts the facts 3 times at once and keeps the majority per field. "
+  f"The upgraded agent scored **{sum(not r['fooled'] for r in fc)}/{len(fc)}** on the 12 practice documents plus our 2 attacks (`output/final_agent_check.json`). "
+  "The tables above are the Problem 6 run, kept as measured.")
 w("- **`--no-defense` still gives the exact Problem 3 agent** (original prompt, read tool, model decides, tools run freely) for Problem 7.")
 
 OUT.write_text("\n".join(L) + "\n")

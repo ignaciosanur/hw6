@@ -12,6 +12,12 @@
 > * at least one prompt types
 > * one follow-up prompt if it was needed (and one sentence on what was lacking after the first)
 
+### What we worked out before building
+
+- Created `AI_prompts.md` at the very start and added each section as its problem began, rather than writing the log at the end.
+- Quoted every prompt word for word. When the Problem 3 prompt arrived in two parts (interrupted mid-typing), we logged it as one initial prompt, because the second part finished the same request rather than fixing it.
+- The only real follow-up (Problem 3, "add a defense") is logged with what was lacking. Other course-corrections were decided in conversation and are recorded below each problem.
+
 ## Problem 2: Size up the handbook
 
 ### Initial prompt
@@ -26,6 +32,12 @@
 > * what the handbook alone costs in dollars on one call, and on 1K calls, with cached tokens and withouth then. Show the math (and do some descriptive stats tables please)
 >
 > We will check these estimates against real runs later on in problem 4
+
+### What we worked out before building
+
+- Counted tokens with tiktoken `o200k_base` and labelled the count an estimate (gpt-6-luna's tokenizer isn't published). Problem 4 then checked it against the API's own counts.
+- Priced the cached case three ways (best case, a workday with a 30-minute cache lifetime, every call missing), not just the best case, because a cache that expires can make caching cost more.
+- Generated the page from a script (`scripts/handbook_estimate.py`) so every number can be reproduced.
 
 ## Problem 3: Build the vendor desk agent
 
@@ -65,6 +77,12 @@
 
 What was lacking after the first prompt: the agent had no prompt-injection defense, and hidden text in 5 of the 12 practice documents changed its decision.
 
+### What we worked out before building
+
+- Used the Responses API (`OpenAIResponsesModel`), because gpt-6-luna rejects tool calls on the Chat Completions endpoint (from Lecture 11's starter).
+- Built the trap tools to only append to `output/trap_calls.json`, and logged usage and the audit trail per run, so later problems could measure cost and detect takeovers.
+- Deliberately left the first agent undefended so Problem 5 had something real to attack, and kept it available afterwards as `--no-defense`.
+
 ## Problem 4: With and without cached tokens
 
 ### Initial prompt
@@ -87,6 +105,12 @@ What was lacking after the first prompt: the agent had no prompt-injection defen
 > * A projection for 1,000 documents a day for 30 days, with and without cache
 > * anything in the numers that its surprising, and why it happnes
 
+### What we worked out before building
+
+- Threw out the first "without cache" run: explicit cache mode with zero breakpoints still showed cached tokens, which the assignment says doesn't count. We re-ran it with a random id at the start of every request, so nothing could match.
+- Tested OpenAI's `prompt_cache_key` to fix the hit-and-miss caching. It didn't help on 4 documents, so we left it out and reported the misses honestly (58% saved, not 90%).
+- Pinned the cost runs to the undefended agent (`defend=False`), so the numbers describe the agent as it was in Problems 3–4.
+
 ## Problem 5: Attack your own agent
 
 ### Initial prompt
@@ -96,6 +120,12 @@ What was lacking after the first prompt: the agent had no prompt-injection defen
 > Save output/attack_results.json: for each document, whether each field matched the key, whether the decision matched, thether a trap tool was called, and whether a link or other strange text showed up in the answer.
 >
 > in output/attack_results.md, for every document that fooled your agent, write what fooled it and where in the file it was hiding. Open the documents the way a person would (browser, PDF viewer, email app) and compare that with what our agent read.
+
+### What we worked out before building
+
+- Ran the original agent through `--no-defense` (original prompt, read tool, model decides) and scored every field against the key, not just the decision.
+- Counted instruction-style words ("corrected") as a flag for review, not as "fooled", because p10 is a real corrected quote.
+- Rendered each document the way a person sees it (headless Chrome, PDF page image, mail-app HTML view) and checked the screenshots, so "invisible" was verified, not assumed. We also tallied every undefended run, since the same document didn't always fool the model.
 
 ## Problem 6: Defend your agent
 
@@ -121,6 +151,12 @@ What was lacking after the first prompt: the agent had no prompt-injection defen
 >
 > Add our safety features to output/harness.md in a Safety section: what each defense layer does, in plain words.
 
+### What we worked out before building
+
+- Design layer: code reads the document (no read tool), the model only extracts facts (`QuoteFacts`), code makes the decision, and `send_email` / `approve_payment` stay registered but need human approval. That met "don't delete them" while making them unreachable without a person.
+- Ran each layer alone as well as all three, to show what each catches that the others miss. Design alone was fooled the most (5/12), which is why no single layer is enough.
+- Compared costs at list price as well as measured, because cache luck made the measured dollars noisy. That showed the design layer pays for the whole defense (1 model call instead of 2).
+
 ## Problem 7: Red team
 
 ### Initial prompt
@@ -132,6 +168,12 @@ What was lacking after the first prompt: the agent had no prompt-injection defen
 > run both attacks on youra gent with no defenses and on your defended agent. In output/red_team.md for each attack: what is hidden, where, what it tries to make the agent do, and what happened before and after your defenses.
 >
 > more points for attacks that are new and that actually fool the agent with no defenses.
+
+### What we worked out before building
+
+- Our first two attacks (a SKU swap and a fake owner waiver) fooled nothing, even with no defenses. We kept them as evidence in `output/red_team_round1/` and changed approach.
+- Round 2 kept the new hiding tricks (a stylesheet `.sr-only` row, text under a white box) but changed the bait to a favourable number framed as a tier that applies to us. It fooled the undefended agent 3/3 on both.
+- Ran every setup 3 times, plus code+design-only and prompt-only, which showed that the prompt rules were the only layer that held.
 
 ## Problem 8: Exam documents
 
@@ -155,6 +197,12 @@ What was lacking after the first prompt: the agent had no prompt-injection defen
 >
 > Graders will compare our results to a hidden asnwer key and rerun some agents to check. We get points for correct fiels and decision, no trap tool calls, and clean documents handled normally. please take your time, and be as smart as possible using all that we have learned through these homework assignemnts and lectures.
 
+### What we worked out before building
+
+- Before touching the exam, made general fixes driven by Problem 7: stylesheet-aware HTML cleaning, PDF text kept only where it leaves ink on the rendered page, and a 3-way majority vote on the extracted facts. Nothing was tuned to the exam documents.
+- Re-checked the final agent on everything with an answer key (12 practice + 2 attacks, 14/14) before the single exam run. Results were saved exactly as returned.
+- Kept the field name `lead_time_days` (matching `practice_key.json`); confirmed with the user afterwards.
+
 ## Problem 9: Results page
 
 ### Initial prompt
@@ -175,6 +223,12 @@ What was lacking after the first prompt: the agent had no prompt-injection defen
 >
 > The more designed the page (fonts, color, layout) that reads well, the more points we get, so please look for UX design tips online before implementing and don't make it look all Claude-like. Take inspo from other websites
 
+### What we worked out before building
+
+- Looked up typography and chart guidance first (about 66-character lines, system font stacks that work offline, FT chart conventions), then chose an editorial report style in the shop's Bulldog Blue instead of a dashboard.
+- Ran the chart colours through the colour-blind validator. Grey failed as a series colour, so we used blue and amber.
+- Built the page from the result files (`scripts/build_report.py`), with inline SVG and base64 screenshots, so it's one file that works with no internet. Checked it at desktop and phone width.
+
 ## Problem 10: Push to GitHub and submit the URL
 
 ### Initial prompt
@@ -188,3 +242,9 @@ What was lacking after the first prompt: the agent had no prompt-injection defen
 > the expected repo should look like the screenshot
 >
 > Other Python files are fine. Put a short note in README.md on how to run our agent
+
+### What we worked out before building
+
+- Scanned every file for the real API key and for any model name other than gpt-6-luna before the first commit, and confirmed `.env` was not staged.
+- Pinned `requirements.txt` to the tested versions and gave the agent a clear message when `PORTKEY_API_KEY` is missing.
+- Verified from a fresh clone: public, no `.env`, every file in the expected tree, and the agent runs.
